@@ -163,8 +163,8 @@
                 <span class="label">Synth</span>
             </button>
             <button class="mix-btn lead" onclick="toggleTrack(3, this)">
-                <span class="icon">&#x26a1;</span>
-                <span class="label">Lead</span>
+                <span class="icon">&#x1f64c;&#x1f3ff;</span>
+                <span class="label">Gospel</span>
             </button>
         </div>
     </div>
@@ -289,7 +289,7 @@
                 if (trackActive[0]) scheduleKick(nextBarTime);
                 if (trackActive[1]) scheduleHiHat(nextBarTime);
                 if (trackActive[2]) scheduleSynth(nextBarTime);
-                if (trackActive[3]) scheduleLead(nextBarTime);
+                if (trackActive[3]) scheduleGospel(nextBarTime);
                 nextBarTime += BAR;
             }
 
@@ -397,52 +397,166 @@
             }
         }
 
-        // --- LEAD : mélodie acid-style ---
-        function scheduleLead(barStart) {
-            // Petite séquence mélodique qui boucle
-            const notes = [
-                { n: 523.3, d: 1 },    // C5
-                { n: 0,     d: 1 },    // silence
-                { n: 392.0, d: 1 },    // G4
-                { n: 440.0, d: 0.5 },  // A4
-                { n: 523.3, d: 0.5 },  // C5
-                { n: 659.3, d: 1 },    // E5
-                { n: 587.3, d: 2 },    // D5
-                { n: 0,     d: 1 },    // silence
-                { n: 440.0, d: 1 },    // A4
-                { n: 523.3, d: 1.5 },  // C5
-                { n: 392.0, d: 0.5 },  // G4
-                { n: 349.2, d: 1 },    // F4
-                { n: 330.6, d: 2 },    // E4 (long)
-                { n: 0,     d: 1 },    // silence
+        // --- GOSPEL HOUSE : Chicago style, progression soulful + lead ---
+        // Progression sur 4 mesures (cycle) — Cm9 / Fm9 / AbMaj7 / G7
+        let gospelBarCount = 0;
+
+        function scheduleGospel(barStart) {
+            const ctx = mixCtx;
+            const chordIdx = gospelBarCount % 4;
+            gospelBarCount++;
+
+            // Accords gospel house (voicings riches, 7èmes et 9èmes)
+            const chords = [
+                // Cm9 : C Eb G Bb D
+                [130.8, 155.6, 196.0, 233.1, 293.7],
+                // Fm9 : F Ab C Eb G
+                [174.6, 207.7, 261.6, 311.1, 392.0],
+                // AbMaj7 : Ab C Eb G
+                [207.7, 261.6, 311.1, 392.0],
+                // G7 : G B D F
+                [196.0, 246.9, 293.7, 349.2],
             ];
 
-            let pos = 0; // position en seizièmes
-            notes.forEach(note => {
-                const sixteenths = note.d * 2; // convertir en doubles-croches
-                if (note.n > 0 && pos < 16) {
-                    const t = barStart + pos * SIXTEENTH;
-                    const dur = Math.min(sixteenths, 16 - pos) * SIXTEENTH;
+            const chord = chords[chordIdx];
 
-                    const osc = mixCtx.createOscillator();
-                    osc.type = 'sawtooth';
-                    osc.frequency.value = note.n;
+            // === PAD SOULFUL : accord tenu sur toute la mesure ===
+            chord.forEach(freq => {
+                // Voix saw filtrée (son chaud, style Juno)
+                const osc1 = ctx.createOscillator();
+                osc1.type = 'sawtooth';
+                osc1.frequency.value = freq;
 
-                    const f = mixCtx.createBiquadFilter();
-                    f.type = 'lowpass';
-                    f.frequency.setValueAtTime(3000, t);
-                    f.frequency.exponentialRampToValueAtTime(600, t + dur * 0.8);
-                    f.Q.value = 10;
+                const osc2 = ctx.createOscillator();
+                osc2.type = 'sawtooth';
+                osc2.frequency.value = freq * 1.005; // detune
 
-                    const g = mixCtx.createGain();
-                    g.gain.setValueAtTime(0.12, t);
-                    g.gain.setValueAtTime(0.12, t + dur * 0.6);
-                    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+                // Vibrato
+                const lfo = ctx.createOscillator();
+                lfo.type = 'sine';
+                lfo.frequency.value = 4.5 + Math.random();
+                const lfoG = ctx.createGain();
+                lfoG.gain.value = freq * 0.008;
+                lfo.connect(lfoG);
+                lfoG.connect(osc1.frequency);
+                lfoG.connect(osc2.frequency);
 
-                    osc.connect(f); f.connect(g); g.connect(mixCtx.destination);
-                    osc.start(t); osc.stop(t + dur);
-                }
-                pos += sixteenths;
+                // Filtre passe-bas qui s'ouvre et se referme (mouvement)
+                const filt = ctx.createBiquadFilter();
+                filt.type = 'lowpass';
+                filt.Q.value = 3;
+                filt.frequency.setValueAtTime(400, barStart);
+                filt.frequency.linearRampToValueAtTime(1800, barStart + BAR * 0.4);
+                filt.frequency.linearRampToValueAtTime(600, barStart + BAR);
+
+                // Envelope
+                const g = ctx.createGain();
+                g.gain.setValueAtTime(0.001, barStart);
+                g.gain.linearRampToValueAtTime(0.045, barStart + BEAT * 0.3);
+                g.gain.setValueAtTime(0.045, barStart + BAR - BEAT * 0.5);
+                g.gain.linearRampToValueAtTime(0.001, barStart + BAR);
+
+                osc1.connect(filt); osc2.connect(filt);
+                filt.connect(g); g.connect(ctx.destination);
+
+                osc1.start(barStart); osc2.start(barStart); lfo.start(barStart);
+                osc1.stop(barStart + BAR); osc2.stop(barStart + BAR); lfo.stop(barStart + BAR);
+            });
+
+            // === STAB PIANO RHODES off-beat (style house) ===
+            // Pattern : .x.. .x.x  (croches, pas toutes)
+            const stabPattern = [0,1,0,0, 0,1,0,1];
+            const eighthNote = BEAT / 2;
+
+            for (let i = 0; i < 8; i++) {
+                if (!stabPattern[i]) continue;
+                const st = barStart + i * eighthNote;
+
+                chord.forEach(freq => {
+                    const osc = ctx.createOscillator();
+                    osc.type = 'sine'; // Rhodes = sinusoïdal
+
+                    // Fréquence une octave au-dessus pour les stabs
+                    osc.frequency.value = freq * 2;
+
+                    // Harmonique pour le côté "cloche" du Rhodes
+                    const osc2 = ctx.createOscillator();
+                    osc2.type = 'sine';
+                    osc2.frequency.value = freq * 4;
+
+                    const g1 = ctx.createGain();
+                    g1.gain.setValueAtTime(0.06, st);
+                    g1.gain.exponentialRampToValueAtTime(0.001, st + eighthNote * 1.5);
+
+                    const g2 = ctx.createGain();
+                    g2.gain.setValueAtTime(0.015, st);
+                    g2.gain.exponentialRampToValueAtTime(0.001, st + eighthNote);
+
+                    osc.connect(g1); g1.connect(ctx.destination);
+                    osc2.connect(g2); g2.connect(ctx.destination);
+                    osc.start(st); osc2.start(st);
+                    osc.stop(st + eighthNote * 2);
+                    osc2.stop(st + eighthNote * 2);
+                });
+            }
+
+            // === LEAD MÉLODIQUE : petite phrase gospel qui tourne ===
+            const melodies = [
+                // Mesure 1 (Cm) : montée soulful
+                [{n:523.3,s:0,d:1},{n:587.3,s:1,d:0.5},{n:622.3,s:1.5,d:0.5},{n:784,s:2,d:1.5},{n:622.3,s:3.5,d:0.5}],
+                // Mesure 2 (Fm) : descente expressive
+                [{n:784,s:0,d:1},{n:698.5,s:1,d:0.5},{n:622.3,s:1.5,d:1},{n:523.3,s:2.5,d:1.5}],
+                // Mesure 3 (Ab) : suspension
+                [{n:622.3,s:0,d:0.5},{n:784,s:0.5,d:0.5},{n:830.6,s:1,d:2},{n:784,s:3,d:1}],
+                // Mesure 4 (G7) : résolution qui ramène
+                [{n:784,s:0,d:0.5},{n:698.5,s:0.5,d:0.5},{n:622.3,s:1,d:0.5},{n:587.3,s:1.5,d:1},{n:523.3,s:2.5,d:1.5}],
+            ];
+
+            const melody = melodies[chordIdx];
+
+            melody.forEach(note => {
+                const t = barStart + note.s * BEAT;
+                const dur = note.d * BEAT;
+
+                // Lead saw filtré avec vibrato (voix synthétique soulful)
+                const osc = ctx.createOscillator();
+                osc.type = 'sawtooth';
+                osc.frequency.value = note.n;
+
+                const osc2 = ctx.createOscillator();
+                osc2.type = 'sawtooth';
+                osc2.frequency.value = note.n * 1.004;
+
+                // Vibrato expressif
+                const lfo = ctx.createOscillator();
+                lfo.type = 'sine';
+                lfo.frequency.value = 5.5;
+                const lfoG = ctx.createGain();
+                lfoG.gain.setValueAtTime(0, t);
+                lfoG.gain.linearRampToValueAtTime(note.n * 0.015, t + dur * 0.4);
+                lfo.connect(lfoG);
+                lfoG.connect(osc.frequency);
+                lfoG.connect(osc2.frequency);
+
+                // Filtre (voix chaude)
+                const filt = ctx.createBiquadFilter();
+                filt.type = 'lowpass';
+                filt.frequency.setValueAtTime(2500, t);
+                filt.frequency.linearRampToValueAtTime(1200, t + dur);
+                filt.Q.value = 4;
+
+                // Envelope
+                const g = ctx.createGain();
+                g.gain.setValueAtTime(0.001, t);
+                g.gain.linearRampToValueAtTime(0.09, t + 0.04);
+                g.gain.setValueAtTime(0.09, t + dur * 0.7);
+                g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+
+                osc.connect(filt); osc2.connect(filt);
+                filt.connect(g); g.connect(ctx.destination);
+
+                osc.start(t); osc2.start(t); lfo.start(t);
+                osc.stop(t + dur); osc2.stop(t + dur); lfo.stop(t + dur);
             });
         }
     </script>
