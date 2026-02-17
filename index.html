@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hello World</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: url('https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1920&q=80') no-repeat center center fixed;
+            background-size: cover;
+            font-family: 'Georgia', serif;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.15);
+            z-index: 0;
+        }
+
+        .content {
+            position: relative;
+            z-index: 1;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 5rem;
+            color: white;
+            text-shadow: 2px 4px 8px rgba(0, 0, 0, 0.5);
+            margin-bottom: 50px;
+            letter-spacing: 4px;
+        }
+
+        .mixer {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .mix-btn {
+            width: 110px;
+            height: 110px;
+            border-radius: 50%;
+            border: 3px solid rgba(255,255,255,0.5);
+            background: rgba(0,0,0,0.3);
+            backdrop-filter: blur(10px);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-family: 'Arial', sans-serif;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .mix-btn .icon {
+            font-size: 2rem;
+            margin-bottom: 4px;
+            transition: transform 0.3s;
+        }
+
+        .mix-btn .label {
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            opacity: 0.8;
+        }
+
+        .mix-btn:hover {
+            transform: scale(1.1);
+            border-color: rgba(255,255,255,0.8);
+        }
+
+        .mix-btn.active {
+            border-color: white;
+            animation: pulse-glow 1s ease-in-out infinite alternate;
+        }
+
+        .mix-btn.active .icon {
+            animation: bounce 0.5s ease-in-out infinite alternate;
+        }
+
+        .mix-btn.bass.active    { background: rgba(255, 50, 80, 0.5);  box-shadow: 0 0 30px rgba(255, 50, 80, 0.4); }
+        .mix-btn.hihat.active   { background: rgba(0, 200, 255, 0.5);  box-shadow: 0 0 30px rgba(0, 200, 255, 0.4); }
+        .mix-btn.synth.active   { background: rgba(180, 80, 255, 0.5); box-shadow: 0 0 30px rgba(180, 80, 255, 0.4); }
+        .mix-btn.lead.active    { background: rgba(255, 200, 0, 0.5);  box-shadow: 0 0 30px rgba(255, 200, 0, 0.4); }
+
+        @keyframes pulse-glow {
+            from { filter: brightness(1); }
+            to   { filter: brightness(1.2); }
+        }
+
+        @keyframes bounce {
+            from { transform: scale(1); }
+            to   { transform: scale(1.15); }
+        }
+
+        .sound-toggle {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 10;
+            background: rgba(255,255,255,0.2);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.4);
+            color: white;
+            font-size: 1.4rem;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: background 0.3s, transform 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .sound-toggle:hover {
+            background: rgba(255,255,255,0.35);
+            transform: scale(1.1);
+        }
+
+        .sound-toggle.playing {
+            background: rgba(0, 180, 220, 0.4);
+        }
+    </style>
+</head>
+<body>
+    <button class="sound-toggle" onclick="toggleAmbiance()" title="Vagues & ambiance">
+        <span id="sound-icon">&#x1f30a;</span>
+    </button>
+
+    <div class="content">
+        <h1>Hello World</h1>
+        <div class="mixer">
+            <button class="mix-btn bass" onclick="toggleTrack(0, this)">
+                <span class="icon">&#x1f525;</span>
+                <span class="label">Kick</span>
+            </button>
+            <button class="mix-btn hihat" onclick="toggleTrack(1, this)">
+                <span class="icon">&#x2728;</span>
+                <span class="label">Hi-Hat</span>
+            </button>
+            <button class="mix-btn synth" onclick="toggleTrack(2, this)">
+                <span class="icon">&#x1f30a;</span>
+                <span class="label">Synth</span>
+            </button>
+            <button class="mix-btn lead" onclick="toggleTrack(3, this)">
+                <span class="icon">&#x26a1;</span>
+                <span class="label">Lead</span>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+
+        // ======= AMBIANCE (vagues + nappes) =======
+        let ambianceCtx = null;
+        let ambiancePlaying = false;
+        let ambianceMaster = null;
+
+        function toggleAmbiance() {
+            const btn = document.querySelector('.sound-toggle');
+            const icon = document.getElementById('sound-icon');
+            if (ambiancePlaying) {
+                ambianceMaster.gain.linearRampToValueAtTime(0, ambianceCtx.currentTime + 1);
+                setTimeout(() => { ambianceCtx.close(); ambianceCtx = null; }, 1200);
+                ambiancePlaying = false;
+                btn.classList.remove('playing');
+                return;
+            }
+            ambianceCtx = new AudioContext();
+            ambiancePlaying = true;
+            btn.classList.add('playing');
+            ambianceMaster = ambianceCtx.createGain();
+            ambianceMaster.gain.setValueAtTime(0, ambianceCtx.currentTime);
+            ambianceMaster.gain.linearRampToValueAtTime(1, ambianceCtx.currentTime + 2);
+            ambianceMaster.connect(ambianceCtx.destination);
+            createWave(ambianceCtx, ambianceMaster, 0);
+            createWave(ambianceCtx, ambianceMaster, 3.5);
+            createWave(ambianceCtx, ambianceMaster, 7);
+            createPad(ambianceCtx, ambianceMaster);
+        }
+
+        function createWave(ctx, dest, offset) {
+            function scheduleWave() {
+                if (!ambiancePlaying) return;
+                const t = ctx.currentTime;
+                const dur = 4 + Math.random() * 3;
+                const buf = ctx.createBuffer(1, ctx.sampleRate * dur, ctx.sampleRate);
+                const d = buf.getChannelData(0);
+                for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+                const src = ctx.createBufferSource(); src.buffer = buf;
+                const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.Q.value = 1;
+                f.frequency.setValueAtTime(100, t);
+                f.frequency.linearRampToValueAtTime(800, t + dur * 0.35);
+                f.frequency.linearRampToValueAtTime(150, t + dur);
+                const g = ctx.createGain();
+                g.gain.setValueAtTime(0.001, t);
+                g.gain.linearRampToValueAtTime(0.12, t + dur * 0.3);
+                g.gain.linearRampToValueAtTime(0.001, t + dur);
+                src.connect(f); f.connect(g); g.connect(dest);
+                src.start(t); src.stop(t + dur);
+                src.onended = () => setTimeout(scheduleWave, (1 + Math.random() * 2) * 1000);
+            }
+            setTimeout(scheduleWave, offset * 1000);
+        }
+
+        function createPad(ctx, dest) {
+            const chords = [[261.6,329.6,392],[220,277.2,329.6],[246.9,311.1,370],[293.7,370,440]];
+            let ci = 0;
+            function play() {
+                if (!ambiancePlaying) return;
+                const t = ctx.currentTime, dur = 8;
+                chords[ci % chords.length].forEach((freq, i) => {
+                    const o1 = ctx.createOscillator(); o1.type = 'sine'; o1.frequency.value = freq / 2;
+                    const o2 = ctx.createOscillator(); o2.type = 'sine'; o2.frequency.value = freq / 2 + 0.8;
+                    const g = ctx.createGain();
+                    g.gain.setValueAtTime(0.001, t);
+                    g.gain.linearRampToValueAtTime(0.04, t + 2);
+                    g.gain.linearRampToValueAtTime(0.001, t + dur);
+                    const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 400;
+                    o1.connect(g); o2.connect(g); g.connect(f); f.connect(dest);
+                    o1.start(t); o2.start(t); o1.stop(t + dur); o2.stop(t + dur);
+                    if (i === 0) o1.onended = () => setTimeout(play, 500);
+                });
+                ci++;
+            }
+            play();
+        }
+
+        // ======= ELECTRO MIXER =======
+        const BPM = 126;
+        const BEAT = 60 / BPM;          // durée d'un beat
+        const BAR = BEAT * 4;            // durée d'une mesure (4 beats)
+        const SIXTEENTH = BEAT / 4;      // double-croche
+
+        let mixCtx = null;
+        const trackActive = [false, false, false, false];
+        const trackGains = [null, null, null, null];
+        let loopTimer = null;
+        let nextBarTime = 0;
+        const SCHEDULE_AHEAD = 0.1;
+
+        function ensureMixCtx() {
+            if (!mixCtx) {
+                mixCtx = new AudioContext();
+                nextBarTime = mixCtx.currentTime + 0.05;
+                scheduleLoop();
+            }
+        }
+
+        function toggleTrack(index, btn) {
+            ensureMixCtx();
+            trackActive[index] = !trackActive[index];
+            btn.classList.toggle('active');
+
+            // Si on désactive et le gain existe, fade out
+            if (!trackActive[index] && trackGains[index]) {
+                trackGains[index].gain.linearRampToValueAtTime(0, mixCtx.currentTime + 0.1);
+            }
+
+            // Si plus aucune piste active, on pourrait garder le contexte en vie
+        }
+
+        function scheduleLoop() {
+            if (!mixCtx) return;
+
+            while (nextBarTime < mixCtx.currentTime + SCHEDULE_AHEAD + BAR) {
+                // Planifier une mesure complète
+                if (trackActive[0]) scheduleKick(nextBarTime);
+                if (trackActive[1]) scheduleHiHat(nextBarTime);
+                if (trackActive[2]) scheduleSynth(nextBarTime);
+                if (trackActive[3]) scheduleLead(nextBarTime);
+                nextBarTime += BAR;
+            }
+
+            loopTimer = setTimeout(scheduleLoop, 50);
+        }
+
+        // --- KICK : boom boom boom boom (4 on the floor) ---
+        function scheduleKick(barStart) {
+            for (let i = 0; i < 4; i++) {
+                const t = barStart + i * BEAT;
+                const osc = mixCtx.createOscillator();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(150, t);
+                osc.frequency.exponentialRampToValueAtTime(30, t + 0.15);
+
+                const g = mixCtx.createGain();
+                g.gain.setValueAtTime(0.7, t);
+                g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+
+                // Distortion légère
+                const dist = mixCtx.createWaveShaper();
+                const curve = new Float32Array(256);
+                for (let j = 0; j < 256; j++) {
+                    const x = (j / 128) - 1;
+                    curve[j] = Math.tanh(x * 2);
+                }
+                dist.curve = curve;
+
+                osc.connect(dist);
+                dist.connect(g);
+                g.connect(mixCtx.destination);
+                osc.start(t);
+                osc.stop(t + 0.3);
+            }
+        }
+
+        // --- HI-HAT : pattern à la double-croche ---
+        function scheduleHiHat(barStart) {
+            //  Pattern: x.x. x.xx x.x. x.xx (x=accent, .=ghost)
+            const pattern = [1, 0.3, 1, 0.3,  1, 0.3, 0.7, 0.7,  1, 0.3, 1, 0.3,  1, 0.3, 0.7, 0.7];
+
+            for (let i = 0; i < 16; i++) {
+                const t = barStart + i * SIXTEENTH;
+                const vol = pattern[i];
+
+                // Bruit blanc court
+                const bufSize = mixCtx.sampleRate * 0.05;
+                const buf = mixCtx.createBuffer(1, bufSize, mixCtx.sampleRate);
+                const d = buf.getChannelData(0);
+                for (let j = 0; j < bufSize; j++) d[j] = (Math.random() * 2 - 1);
+                const src = mixCtx.createBufferSource(); src.buffer = buf;
+
+                const f = mixCtx.createBiquadFilter();
+                f.type = 'highpass';
+                f.frequency.value = 7000 + (i % 2 === 0 ? 0 : 2000); // alternance ouverte/fermée
+                f.Q.value = 1;
+
+                const g = mixCtx.createGain();
+                g.gain.setValueAtTime(0.2 * vol, t);
+                g.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+
+                src.connect(f); f.connect(g); g.connect(mixCtx.destination);
+                src.start(t); src.stop(t + 0.05);
+            }
+        }
+
+        // --- SYNTH : accords stabby (off-beat stabs) ---
+        function scheduleSynth(barStart) {
+            // Accords qui changent chaque mesure
+            const chordSets = [
+                [130.8, 164.8, 196.0],   // C3
+                [110.0, 138.6, 164.8],   // A2
+                [123.5, 155.6, 185.0],   // B2
+                [146.8, 185.0, 220.0],   // D3
+            ];
+            // Cycle basé sur le temps
+            const chordIdx = Math.round(barStart / BAR) % chordSets.length;
+            const chord = chordSets[chordIdx];
+
+            // Pattern off-beat : .x.x ..x. .x.x ..x.
+            const stabs = [0,1,0,1, 0,0,1,0, 0,1,0,1, 0,0,1,0];
+
+            for (let i = 0; i < 16; i++) {
+                if (!stabs[i]) continue;
+                const t = barStart + i * SIXTEENTH;
+
+                chord.forEach(freq => {
+                    const osc = mixCtx.createOscillator();
+                    osc.type = 'square';
+                    osc.frequency.value = freq;
+
+                    const f = mixCtx.createBiquadFilter();
+                    f.type = 'lowpass';
+                    f.frequency.setValueAtTime(2000, t);
+                    f.frequency.exponentialRampToValueAtTime(400, t + SIXTEENTH * 0.8);
+                    f.Q.value = 5;
+
+                    const g = mixCtx.createGain();
+                    g.gain.setValueAtTime(0.08, t);
+                    g.gain.exponentialRampToValueAtTime(0.001, t + SIXTEENTH * 0.9);
+
+                    osc.connect(f); f.connect(g); g.connect(mixCtx.destination);
+                    osc.start(t); osc.stop(t + SIXTEENTH);
+                });
+            }
+        }
+
+        // --- LEAD : mélodie acid-style ---
+        function scheduleLead(barStart) {
+            // Petite séquence mélodique qui boucle
+            const notes = [
+                { n: 523.3, d: 1 },    // C5
+                { n: 0,     d: 1 },    // silence
+                { n: 392.0, d: 1 },    // G4
+                { n: 440.0, d: 0.5 },  // A4
+                { n: 523.3, d: 0.5 },  // C5
+                { n: 659.3, d: 1 },    // E5
+                { n: 587.3, d: 2 },    // D5
+                { n: 0,     d: 1 },    // silence
+                { n: 440.0, d: 1 },    // A4
+                { n: 523.3, d: 1.5 },  // C5
+                { n: 392.0, d: 0.5 },  // G4
+                { n: 349.2, d: 1 },    // F4
+                { n: 330.6, d: 2 },    // E4 (long)
+                { n: 0,     d: 1 },    // silence
+            ];
+
+            let pos = 0; // position en seizièmes
+            notes.forEach(note => {
+                const sixteenths = note.d * 2; // convertir en doubles-croches
+                if (note.n > 0 && pos < 16) {
+                    const t = barStart + pos * SIXTEENTH;
+                    const dur = Math.min(sixteenths, 16 - pos) * SIXTEENTH;
+
+                    const osc = mixCtx.createOscillator();
+                    osc.type = 'sawtooth';
+                    osc.frequency.value = note.n;
+
+                    const f = mixCtx.createBiquadFilter();
+                    f.type = 'lowpass';
+                    f.frequency.setValueAtTime(3000, t);
+                    f.frequency.exponentialRampToValueAtTime(600, t + dur * 0.8);
+                    f.Q.value = 10;
+
+                    const g = mixCtx.createGain();
+                    g.gain.setValueAtTime(0.12, t);
+                    g.gain.setValueAtTime(0.12, t + dur * 0.6);
+                    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+
+                    osc.connect(f); f.connect(g); g.connect(mixCtx.destination);
+                    osc.start(t); osc.stop(t + dur);
+                }
+                pos += sixteenths;
+            });
+        }
+    </script>
+</body>
+</html>
